@@ -28,6 +28,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Properties;
 
+/**
+ * 热门商品统计
+ */
+
 public class HotItems {
     public static void main(String[] args) throws Exception{
         //1 创建执行环境
@@ -59,7 +63,7 @@ public class HotItems {
                     , fields[3]
                     , new Long(fields[4]));
                 })
-                //乱序数据设置时间戳和workmark
+                //顺序数据设置时间戳和workmark
                 .assignTimestampsAndWatermarks(new AscendingTimestampExtractor<UserBehavior>() {
                     @Override
                     public long extractAscendingTimestamp(UserBehavior userBehavior) {

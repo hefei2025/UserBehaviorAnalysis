@@ -14,14 +14,18 @@ import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.java.StreamTableEnvironment;
 import org.apache.flink.types.Row;
 
+/**
+ * 热门商品统计
+ */
+
 public class HotItemsWithSQL {
     public static void main(String[] args) throws Exception {
         //1 创建执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        //env.setParallelism(1);
+        env.setParallelism(1);
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
         //2.1 从文件中读取数据，创建DataStream
-        DataStreamSource<String> inputStream = env.readTextFile("C:\\GitHub\\2021\\Flink_UserBehaviorAnalysis\\HotItemsAnalysis\\src\\main\\resources\\UserBehavior.csv");
+        DataStreamSource<String> inputStream = env.readTextFile("C:\\GitHub\\2021\\UserBehaviorAnalysis\\HotItemsAnalysis\\src\\main\\resources\\UserBehavior.csv");
 
         //3 转换成POJO，分配时间戳和watermark
         SingleOutputStreamOperator<UserBehavior> dataStream = inputStream.map(line -> {
@@ -64,7 +68,22 @@ public class HotItemsWithSQL {
         DataStream<Row> aggStream = tableEnv.toAppendStream(tableAgg, Row.class);
         tableEnv.createTemporaryView("agg",aggStream,"itemId,windowEnd,cnt");
         Table resultTable = tableEnv.sqlQuery("select * from (select * , ROW_NUMBER() over (partition by windowEnd order by cnt desc ) as row_num from agg ) where row_num <=5");
-        tableEnv.toRetractStream(resultTable,Row.class).print();
+
+        //tableEnv.toRetractStream(resultTable,Row.class).print();
+
+        //纯SQL实现
+        tableEnv.createTemporaryView("data_table",dataStream,"itemId, behavior, timestamp.rowtime as ts");
+
+        Table resultSqlTable = tableEnv.sqlQuery("select * from " +
+                "( select * , ROW_NUMBER() over ( partition by windowEnd order by cnt desc ) as row_num " +
+                " from  ( " +
+                "   select itemId , count(itemId) as  cnt , HOP_END( ts,interval '5' minute , interval '1' hour ) as windowEnd " +
+                "   from data_table " +
+                "   where behavior = 'pv' " +
+                "   group by itemId , HOP(ts,interval '5' minute , interval '1' hour ) " +
+                "  ) ) " +
+                " where row_num <=5 ");
+        tableEnv.toRetractStream(resultSqlTable,Row.class).print();
 
         env.execute("hot items anaylsis with SQL");
 
